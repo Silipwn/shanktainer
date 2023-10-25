@@ -6,7 +6,7 @@ set -o pipefail
 # params - base
 DOCKER_USER=user
 BASE_IMAGENAME=devc-ubuntu22:rust
-BASE_DOCKERFILE=Dockerfile.silipwn
+BASE_DOCKERFILE=Dockerfile.rust
 BASE_CONTAINERNAME=lib-replacer
 
 # default mount volumes
