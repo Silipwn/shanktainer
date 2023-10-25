@@ -1,0 +1,153 @@
+FROM quay.io/toolbx-images/ubuntu-toolbox:22.04
+
+ARG USER=user
+ARG PASSWD=pass
+ARG UID=1000
+ARG GID=1000
+
+ENV USER ${USER}
+ENV HOME /home/${USER}
+ENV TZ="America/New_York"
+
+# to fix tzdata hanging up the build process
+ENV DEBIAN_FRONTEND=noninteractive
+
+# better colors
+ENV TERM xterm-256color
+
+# update, upgrade, install sudo
+RUN apt-get update \
+  && apt-get upgrade -y \
+  && apt-get install -y sudo \
+  && apt-get autoremove -y
+
+# apt-utils will be useful
+RUN apt-get install -y apt-utils \
+  && apt-get autoremove -y
+
+# unminimize since this is a dev container
+RUN yes | unminimize
+
+# locales
+# source: https://serverfault.com/a/801162
+ENV LANG=en_US.UTF-8
+RUN apt-get install -y locales \
+  && sed -i -e "s/# $LANG.*/$LANG UTF-8/" /etc/locale.gen \
+  && dpkg-reconfigure --frontend=noninteractive locales \
+  && update-locale LANG=$LANG
+
+# dev packages
+RUN apt-get install -y \
+    apt-file \
+    autoconf \
+    bat \
+    bfs \
+    black \
+    clang \
+    clang-format \
+    cmake \
+    curl \
+    exa \
+    fd-find \
+    file \
+    g++ \
+    gcc \
+    gdb \
+    gettext \
+    git \
+    htop \
+    lld \
+    make \
+    neofetch \
+    ninja-build \
+    plocate \
+    python-is-python3 \
+    python3 \
+    python3-pip \
+    python3-venv \
+    ripgrep \
+    software-properties-common \
+    stow \
+    tmux \
+    tree \
+    unzip \
+    universal-ctags \
+    wget \
+    xclip \
+    xsel \
+  && apt-get autoremove -y
+
+# bat -> batcat
+# fd -> fdfind
+RUN ln -s /usr/bin/batcat /usr/bin/bat && ln -s /usr/bin/fdfind /usr/bin/fd
+
+# # fish shell
+# RUN add-apt-repository ppa:fish-shell/release-3 && \
+#     apt-get update && \
+#     apt-get install -y fish && \
+#     apt-get autoremove -y
+
+# neovim
+RUN cd /tmp \
+  && wget -c https://github.com/neovim/neovim/archive/refs/tags/stable.tar.gz --output-document neovim.tar.gz \
+  && tar xf neovim.tar.gz \
+  && cd neovim-stable \
+  && make CMAKE_BUILD_TYPE=RelWithDebInfo -j$(nproc) \
+  && cd build && cpack -G DEB && sudo dpkg -i nvim-linux64.deb \
+  && cd /tmp && rm -rf neovim \
+  && apt-get install -y python3-neovim
+
+# create user
+RUN useradd --create-home ${USER} --uid ${UID} --shell /bin/bash && \
+    echo "${USER}:${PASSWD}" | chpasswd && \
+    echo "${USER} ALL=(ALL) ALL" >> /etc/sudoers
+
+RUN echo "${USER}:${PASSWD}" | chpasswd && chown -R ${USER} /home/${USER}
+
+RUN curl https://getcroc.schollz.com | bash
+# change users default shell
+# RUN chsh ${USER} --shell /usr/bin/fish
+
+# change to $USER directory
+WORKDIR /home/${USER}
+USER ${USER}
+
+# tmux plugin manager
+RUN git clone https://github.com/tmux-plugins/tpm $HOME/.tmux/plugins/tpm
+
+# Install lvim 
+# RUN LV_BRANCH='release-1.3/neovim-0.9' bash <(curl -s https://raw.githubusercontent.com/LunarVim/LunarVim/release-1.3/neovim-0.9/utils/installer/install.sh)
+ARG LV_BRANCH=release-1.3/neovim-0.9
+# From the https://github.com/LunarVim/LunarVim/blob/master/utils/docker/Dockerfile.remote
+RUN LV_BRANCH=${LV_BRANCH} curl -LSs https://raw.githubusercontent.com/lunarvim/lunarvim/${LV_BRANCH}/utils/installer/install.sh | bash -s -- --no-install-dependencies
+
+# Chezmoi 
+RUN sh -c "$(curl -fsLS get.chezmoi.io/)" -- init --apply https://github.com/Silipwn/Dots.git 
+
+# Install Pip stuff
+# Ranger
+RUN pip3 install ranger-fm 
+
+# Oh my bash
+RUN bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh)"
+RUN sh -c "echo 'alias vim=nvim' >> ~/.bashrc" \
+ && sh -c "sed -i 's/^OSH_THEME=.*/OSH_THEME="purity"/' ~/.bashrc"  \
+ && sh -c "printf '# Path addition\nPATH=~/.local/bin:$PATH\n' >> ~/.bashrc"
+
+# Zoxide (Check)
+RUN curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash \
+ && sh -c "echo 'eval \"\$(zoxide init bash)\"' >> ~/.bashrc"
+
+# FZF
+RUN git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf && ~/.fzf/install --all
+
+# Add Rust 
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+
+# Add FNM for node
+RUN curl -fsSL https://fnm.vercel.app/install | bash 
+
+# Add GEF
+RUN bash -c "$(curl -fsSL https://gef.blah.cat/sh)"
+
+ENTRYPOINT ["/bin/bash"]
